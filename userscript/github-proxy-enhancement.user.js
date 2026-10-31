@@ -2,18 +2,18 @@
 // @name         GitHub Proxy
 // @name:zh-CN   Github 代理
 // @namespace    github-proxy
-// @version      1.0.2
+// @version      1.0.3
 // @author       梦初雪
 // @description  Add proxy-aware Git clone, Raw, Release and source archive links to GitHub.
 // @match        https://github.com/*
-// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAACEUExURUxpcRgWFhsYGBgWFhcWFh8WFhoYGBgWFiUlJRcVFRkWFhgVFRgWFhgVFRsWFhgWFigeHhkWFv////////////r6+h4eHv///xcVFfLx8SMhIUNCQpSTk/r6+jY0NCknJ97e3ru7u+fn51BOTsPCwqGgoISDg6empmpoaK2srNDQ0FhXV3eXcCcAAAAXdFJOUwCBIZXMGP70BuRH2Ze/LpIMUunHkpQR34sfygAAAVpJREFUOMt1U+magjAMDAVb5BDU3W25b9T1/d9vaYpQKDs/rF9nSNJkArDA9ezQZ8wPbc8FE6eAiQUsOO1o19JolFibKCdHGHC0IJezOMD5snx/yE+KOYYr42fPSufSZyazqDoseTPw4lGJNOu6LBXVUPBG3lqYAOv/5ZwnNUfUifzBt8gkgfgINmjxOpgqUA147QWNaocLniqq3QsSVbQHNp45N/BAwoYQz9oUJEiE4GMGfoBSMj5gjeWRIMMqleD/CAzUHFqTLyjOA5zjNnwa4UCEZ2YK3khEcBXHjVBtEFeIZ6+NxYbPqWp1DLKV42t6Ujn2ydyiPi9nX0TTNAkVVZ/gozsl6FbrktkwaVvL2TRK0C8Ca7Hck7f5OBT6FFbLATkL2ugV0tm0RLM9fedDvhWstl8Wp9AFDjFX7yOY/lJrv8AkYuz7fuP8dv9izCYH+x3/LBnj9fYPBTpJDNzX+7cAAAAASUVORK5CYII=
+// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAACEUExURUxpcRgWFhsYGBgWFhcWFh8WFhoYGBgWFiUlJRcVFRkWFhgVFRgWFhgVFRsWFhgWFigeHhkWFv////////////r6+h4eHv///xcVFfLx8SMhQUNCQpSTk/r6+jY0NCknJ97e3ru7u+fn51BOTsPCwqGgoISDg6empmpoaK2srNDQ0FhXV3eXcCcAAAAXdFJOUwCBIZXMGP70BuRH2Ze/LpIMUunHkpQR34sfygAAAVpJREFUOMt1U+magjAMDAVb5BDU3W25b9T1/d9vaYpQKDs/rF9nSNJkArDA9ezQZ8wPbc8FE6eAiQUsOO1o19JolFibKCdHGHC0IJezOMD5snx/yE+KOYYr42fPSufSZyazqDoseTPw4lGJNOu6LBXVUPBG3lqYAOv/5ZwnNUfUifzBt8gkgfgINmjxOpgqUA147QWNaocLniqq3QsSVbQHNp45N/BAwoYQz9oUJEiE4GMGfoBSMj5gjeWRIMMqleD/CAzUHFqTLyjOA5zjNnwa4UCEZ2YK3khEcBXHjVBtEFeIZ6+NxYbPqWp1DLKV42t6Ujn2ydyiPi9nX0TTNAkVVZ/gozsl6FbrktkwaVvL2TRK0C8Ca7Hck7f5OBT6FFbLATkL2ugV0tm0RLM9fedDvhWstl8Wp9AFDjFX7yOY/lJrv8AkYuz7fuP8dv9izCYH+x3/LBnj9fYPBTpJDNzX+7cAAAAASUVORK5CYII=
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_setClipboard
 // @grant        GM_notification
-// @license      AGPL-3.0 license
 // @run-at       document-idle
+// @license      AGPL-3.0 license
 // ==/UserScript==
 
 (function () {
@@ -217,7 +217,20 @@
       }
     });
 
-    // 清理 Download 代理按钮
+    // 清理 Download 代理按钮（原生 ActionList 样式）
+    document.querySelectorAll('[data-ghp-download-item]').forEach(item => {
+      const prev = item.previousElementSibling;
+      if (!prev || !prev.tagName || prev.tagName.toLowerCase() !== 'li') {
+        item.remove();
+        return;
+      }
+      const html = prev.innerHTML;
+      if (!html.includes('/releases/download/') && !html.includes('/archive/') && !html.includes('codeload.github.com/')) {
+        item.remove();
+      }
+    });
+
+    // 清理 Download 代理按钮（兜底样式）
     document.querySelectorAll('.ghp-download-proxy').forEach(link => {
       const prev = link.previousElementSibling;
       const isValidDownload = prev && prev.tagName === 'A' && (
@@ -266,13 +279,11 @@
       const anchor = input.closest('[class*="InputGroup"], [class*="input-group"]') || input.parentElement;
       if (!anchor || !anchor.parentNode) continue;
 
-      // 检查是否已经存在且内容匹配
       let existing = anchor.nextElementSibling;
       if (existing && existing.classList.contains(WRAPPER_CLASS) && existing.dataset.ghpFor === proxyUrl) {
         continue;
       }
 
-      // 清理可能存在的旧按钮组
       let sibling = anchor.nextElementSibling;
       while (sibling && sibling.classList.contains(WRAPPER_CLASS)) {
         const toRemove = sibling;
@@ -318,7 +329,6 @@
     if (item && group && item.parentElement === group) {
       rawButton.dataset.ghpRawAction = '1';
 
-      // 检查是否已存在且匹配
       let existing = item.nextElementSibling;
       if (existing && existing.hasAttribute('data-ghp-raw-item')) {
         const link = existing.querySelector('a');
@@ -327,7 +337,6 @@
         }
       }
 
-      // 清理旧 Item
       let sibling = item.nextElementSibling;
       while (sibling && sibling.hasAttribute('data-ghp-raw-item')) {
         const toRemove = sibling;
@@ -358,7 +367,6 @@
 
       item.after(newItem);
     } else {
-      // 兜底处理
       rawButton.dataset.ghpRawAction = '1';
 
       let existing = rawButton.nextElementSibling;
@@ -436,22 +444,72 @@
 
       const proxyUrl = buildProxyUrl(route, url.pathname, url.search);
 
-      let existing = anchor.nextElementSibling;
-      if (existing && existing.classList.contains('ghp-download-proxy') && existing.getAttribute('href') === proxyUrl) {
-        continue;
-      }
+      // 尝试寻找 GitHub 原生的 ActionList 菜单节点
+      const actionListItem = anchor.closest('li[data-component="ActionList.Item"]');
 
-      let sibling = anchor.nextElementSibling;
-      while (sibling && sibling.classList.contains('ghp-download-proxy')) {
-        const toRemove = sibling;
-        sibling = sibling.nextElementSibling;
-        toRemove.remove();
-      }
+      if (actionListItem) {
+        let existing = actionListItem.nextElementSibling;
+        if (existing && existing.hasAttribute('data-ghp-download-item')) {
+          const existingLink = existing.querySelector('a');
+          if (existingLink && existingLink.href === proxyUrl) {
+            continue;
+          }
+        }
 
-      const link = createLink('Proxy', proxyUrl);
-      link.classList.add('ghp-download-proxy');
-      link.title = 'Download through GitHub Proxy';
-      anchor.insertAdjacentElement('afterend', link);
+        let sibling = actionListItem.nextElementSibling;
+        while (sibling && sibling.hasAttribute('data-ghp-download-item')) {
+          const toRemove = sibling;
+          sibling = sibling.nextElementSibling;
+          toRemove.remove();
+        }
+
+        // 克隆整个原生 li 节点
+        const newLi = actionListItem.cloneNode(true);
+        newLi.setAttribute('data-ghp-download-item', '1');
+
+        // 移除可能克隆进来的旧脚本节点
+        newLi.querySelectorAll('.ghp-action, .ghp-download-proxy').forEach(el => el.remove());
+
+        const newAnchor = newLi.querySelector('a');
+        if (newAnchor) {
+          newAnchor.href = proxyUrl;
+          newAnchor.target = '_blank';
+          newAnchor.rel = 'noopener noreferrer nofollow';
+          newAnchor.referrerPolicy = 'no-referrer';
+          newAnchor.removeAttribute('id');
+          newAnchor.removeAttribute('aria-labelledby');
+          newAnchor.setAttribute('title', 'Download through GitHub Proxy');
+
+          // 修改文本，保留原有图标
+          const label = newAnchor.querySelector('[data-component="ActionList.Item.Label"]');
+          if (label) {
+            label.textContent = `${label.textContent} (Proxy)`;
+          } else {
+            newAnchor.textContent = 'Download via Proxy';
+          }
+        }
+
+        actionListItem.after(newLi);
+
+      } else {
+        // 兜底逻辑：使用自定义样式
+        let existing = anchor.nextElementSibling;
+        if (existing && existing.classList.contains('ghp-download-proxy') && existing.getAttribute('href') === proxyUrl) {
+          continue;
+        }
+
+        let sibling = anchor.nextElementSibling;
+        while (sibling && sibling.classList.contains('ghp-download-proxy')) {
+          const toRemove = sibling;
+          sibling = sibling.nextElementSibling;
+          toRemove.remove();
+        }
+
+        const link = createLink('Proxy', proxyUrl);
+        link.classList.add('ghp-download-proxy');
+        link.title = 'Download through GitHub Proxy';
+        anchor.insertAdjacentElement('afterend', link);
+      }
     }
   }
 })();
