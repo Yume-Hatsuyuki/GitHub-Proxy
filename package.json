@@ -1,0 +1,17 @@
+{
+  "name": "github-proxy",
+  "version": "1.0.0",
+  "description": "A fixed-upstream GitHub HTTPS proxy for Cloudflare Workers, with an optional browser userscript.",
+  "type": "module",
+  "private": false,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "check": "node --check src/index.js && node --check userscript/github-proxy-enhancement.user.js",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
