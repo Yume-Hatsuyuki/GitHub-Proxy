@@ -2,15 +2,17 @@
 // @name         GitHub Proxy
 // @name:zh-CN   Github 代理
 // @namespace    github-proxy
-// @version      1.0.1
+// @version      1.0.2
 // @author       梦初雪
 // @description  Add proxy-aware Git clone, Raw, Release and source archive links to GitHub.
 // @match        https://github.com/*
+// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAACEUExURUxpcRgWFhsYGBgWFhcWFh8WFhoYGBgWFiUlJRcVFRkWFhgVFRgWFhgVFRsWFhgWFigeHhkWFv////////////r6+h4eHv///xcVFfLx8SMhIUNCQpSTk/r6+jY0NCknJ97e3ru7u+fn51BOTsPCwqGgoISDg6empmpoaK2srNDQ0FhXV3eXcCcAAAAXdFJOUwCBIZXMGP70BuRH2Ze/LpIMUunHkpQR34sfygAAAVpJREFUOMt1U+magjAMDAVb5BDU3W25b9T1/d9vaYpQKDs/rF9nSNJkArDA9ezQZ8wPbc8FE6eAiQUsOO1o19JolFibKCdHGHC0IJezOMD5snx/yE+KOYYr42fPSufSZyazqDoseTPw4lGJNOu6LBXVUPBG3lqYAOv/5ZwnNUfUifzBt8gkgfgINmjxOpgqUA147QWNaocLniqq3QsSVbQHNp45N/BAwoYQz9oUJEiE4GMGfoBSMj5gjeWRIMMqleD/CAzUHFqTLyjOA5zjNnwa4UCEZ2YK3khEcBXHjVBtEFeIZ6+NxYbPqWp1DLKV42t6Ujn2ydyiPi9nX0TTNAkVVZ/gozsl6FbrktkwaVvL2TRK0C8Ca7Hck7f5OBT6FFbLATkL2ugV0tm0RLM9fedDvhWstl8Wp9AFDjFX7yOY/lJrv8AkYuz7fuP8dv9izCYH+x3/LBnj9fYPBTpJDNzX+7cAAAAASUVORK5CYII=
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_setClipboard
 // @grant        GM_notification
+// @license      AGPL-3.0 license
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -117,7 +119,7 @@
 
   function scanPage() {
     if (!getEnabled() || !getProxyBase()) return;
-    cleanupOrphanRawItems();
+    cleanupStaleNodes();
     addCloneActions();
     addRawPageAction();
     addRawFileListActions();
@@ -204,6 +206,48 @@
     return button;
   }
 
+  // 核心修复：清理 React 重新渲染后，宿主节点消失导致残留的“孤儿按钮”
+  function cleanupStaleNodes() {
+    // 清理 Clone 克隆按钮组
+    document.querySelectorAll(`.${WRAPPER_CLASS}`).forEach(wrapper => {
+      const prev = wrapper.previousElementSibling;
+      const hasInput = prev && (prev.tagName === 'INPUT' || prev.querySelector('input'));
+      if (!hasInput) {
+        wrapper.remove();
+      }
+    });
+
+    // 清理 Download 代理按钮
+    document.querySelectorAll('.ghp-download-proxy').forEach(link => {
+      const prev = link.previousElementSibling;
+      const isValidDownload = prev && prev.tagName === 'A' && (
+        prev.href.includes('/releases/download/') ||
+        prev.href.includes('/archive/') ||
+        prev.href.includes('codeload.github.com/')
+      );
+      if (!isValidDownload) {
+        link.remove();
+      }
+    });
+
+    // 清理 File List 代理按钮
+    document.querySelectorAll('.ghp-file-link').forEach(link => {
+      const prev = link.previousElementSibling;
+      const isValidBlob = prev && prev.tagName === 'A' && prev.href.includes('/blob/');
+      if (!isValidBlob) {
+        link.remove();
+      }
+    });
+
+    // 清理 Raw via Proxy 独立 Item
+    document.querySelectorAll('[data-ghp-raw-item]').forEach(item => {
+      const prev = item.previousElementSibling;
+      if (!prev || !prev.querySelector('[data-ghp-raw-action="1"]')) {
+        item.remove();
+      }
+    });
+  }
+
   function addCloneActions() {
     const inputs = document.querySelectorAll('input');
 
@@ -211,25 +255,41 @@
       const rawValue = (input.value || input.getAttribute('value') || '').trim();
       const cloneValue = rawValue.replace(/^git\s+clone\s+/i, '');
       const githubUrl = parseGitHubUrl(cloneValue);
-      if (!githubUrl || input.dataset.ghpCloneActions === '1') continue;
+      if (!githubUrl) continue;
 
       const pathParts = githubUrl.pathname.split('/').filter(Boolean);
       if (pathParts.length !== 2 || !pathParts[1]) continue;
       if (input.closest('form') && input.type !== 'text') continue;
 
       const proxyUrl = buildProxyUrl('gh', githubUrl.pathname.replace(/\/$/, '') + (githubUrl.pathname.endsWith('.git') ? '' : '.git'), githubUrl.search);
+
+      const anchor = input.closest('[class*="InputGroup"], [class*="input-group"]') || input.parentElement;
+      if (!anchor || !anchor.parentNode) continue;
+
+      // 检查是否已经存在且内容匹配
+      let existing = anchor.nextElementSibling;
+      if (existing && existing.classList.contains(WRAPPER_CLASS) && existing.dataset.ghpFor === proxyUrl) {
+        continue;
+      }
+
+      // 清理可能存在的旧按钮组
+      let sibling = anchor.nextElementSibling;
+      while (sibling && sibling.classList.contains(WRAPPER_CLASS)) {
+        const toRemove = sibling;
+        sibling = sibling.nextElementSibling;
+        toRemove.remove();
+      }
+
       const wrapper = document.createElement('div');
       wrapper.className = WRAPPER_CLASS;
+      wrapper.dataset.ghpFor = proxyUrl;
       wrapper.append(
         createCopyButton('Copy proxy URL', proxyUrl),
         createCopyButton('Copy proxy git clone command', `git clone ${proxyUrl}`),
         createLink('Open proxy URL', proxyUrl)
       );
 
-      const anchor = input.closest('[class*="InputGroup"], [class*="input-group"]') || input.parentElement;
-      if (!anchor || !anchor.parentNode) continue;
       anchor.insertAdjacentElement('afterend', wrapper);
-      input.dataset.ghpCloneActions = '1';
     }
   }
 
@@ -238,23 +298,6 @@
     const index = pathname.indexOf(marker);
     if (index < 0) return '';
     return pathname.slice(0, index) + '/' + pathname.slice(index + marker.length);
-  }
-
-  // 清理 React 重新渲染后残留的孤立 Raw via Proxy Item
-  function cleanupOrphanRawItems() {
-    document.querySelectorAll('[data-ghp-raw-item]').forEach((node) => {
-      const prev = node.previousElementSibling;
-      const stillValid = prev &&
-        prev.querySelector('[data-ghp-raw-action="1"]') &&
-        node.parentElement &&
-        node.parentElement.querySelector('[data-component="ButtonGroup"]');
-      // 只要它还在 ButtonGroup 里、且前一项是当前 Raw 按钮，就保留
-      if (!stillValid && !node.querySelector('[data-ghp-raw-action="1"]')) {
-        // 若 Item 本身还挂在 Page 上但不属于当前 ButtonGroup，则移除
-        const group = node.closest('[data-component="ButtonGroup"]');
-        if (!group) node.remove();
-      }
-    });
   }
 
   function addRawPageAction() {
@@ -266,15 +309,32 @@
         element.textContent.trim() === 'Raw' || element.getAttribute('aria-label') === 'Raw'
       );
 
-    if (!rawButton || rawButton.dataset.ghpRawAction === '1') return;
+    if (!rawButton) return;
 
     const proxyUrl = buildProxyUrl('raw', rawPath, window.location.search);
-
     const item = rawButton.closest('.prc-ButtonGroup-Item-PqvDl');
     const group = rawButton.closest('[data-component="ButtonGroup"]');
 
     if (item && group && item.parentElement === group) {
-      // 1. 克隆 Raw 链接 → 完整继承 GitHub 原生 LinkButton 样式
+      rawButton.dataset.ghpRawAction = '1';
+
+      // 检查是否已存在且匹配
+      let existing = item.nextElementSibling;
+      if (existing && existing.hasAttribute('data-ghp-raw-item')) {
+        const link = existing.querySelector('a');
+        if (link && link.getAttribute('href') === proxyUrl) {
+          return;
+        }
+      }
+
+      // 清理旧 Item
+      let sibling = item.nextElementSibling;
+      while (sibling && sibling.hasAttribute('data-ghp-raw-item')) {
+        const toRemove = sibling;
+        sibling = sibling.nextElementSibling;
+        toRemove.remove();
+      }
+
       const link = rawButton.cloneNode(true);
       link.removeAttribute('data-testid');
       link.removeAttribute('data-ghp-raw-action');
@@ -291,41 +351,63 @@
         link.textContent = 'Raw via Proxy';
       }
 
-      // 2. 克隆原 Item 的容器，作为独立的 ButtonGroup Item
       const newItem = document.createElement('div');
       newItem.className = item.className;
       newItem.dataset.ghpRawItem = '1';
       newItem.appendChild(link);
 
-      // 3. 插到 Raw 所在 Item 后面（ButtonGroup 会自动重新计算圆角）
       item.after(newItem);
     } else {
-      // 兜底：找不到 ButtonGroup 结构时退回原逻辑
+      // 兜底处理
+      rawButton.dataset.ghpRawAction = '1';
+
+      let existing = rawButton.nextElementSibling;
+      if (existing && existing.classList.contains('ghp-raw-fallback') && existing.getAttribute('href') === proxyUrl) {
+        return;
+      }
+
+      let sibling = rawButton.nextElementSibling;
+      while (sibling && sibling.classList.contains('ghp-raw-fallback')) {
+        const toRemove = sibling;
+        sibling = sibling.nextElementSibling;
+        toRemove.remove();
+      }
+
       const link = createLink('Raw via Proxy', proxyUrl);
+      link.classList.add('ghp-raw-fallback');
       rawButton.insertAdjacentElement('afterend', link);
     }
-
-    rawButton.dataset.ghpRawAction = '1';
   }
 
   function addRawFileListActions() {
-    // The current file page has its own Raw action; this pass is for directory listings.
     if (window.location.pathname.includes('/blob/')) return;
 
     const fileLinks = document.querySelectorAll('a[href*="/blob/"]');
     for (const anchor of fileLinks) {
-      if (anchor.dataset.ghpRawAction === '1') continue;
       const url = parseGitHubUrl(anchor.href);
       if (!url) continue;
 
       const rawPath = rawPathFromBlob(url.pathname);
       if (!rawPath) continue;
 
-      const link = createLink('☁', buildProxyUrl('raw', rawPath, url.search), 'ghp-file-link');
+      const proxyUrl = buildProxyUrl('raw', rawPath, url.search);
+
+      let existing = anchor.nextElementSibling;
+      if (existing && existing.classList.contains('ghp-file-link') && existing.getAttribute('href') === proxyUrl) {
+        continue;
+      }
+
+      let sibling = anchor.nextElementSibling;
+      while (sibling && sibling.classList.contains('ghp-file-link')) {
+        const toRemove = sibling;
+        sibling = sibling.nextElementSibling;
+        toRemove.remove();
+      }
+
+      const link = createLink('☁', proxyUrl, 'ghp-file-link');
       link.title = 'Download this file through GitHub Proxy';
       link.setAttribute('aria-label', 'Download raw file through GitHub Proxy');
       anchor.insertAdjacentElement('afterend', link);
-      anchor.dataset.ghpRawAction = '1';
     }
   }
 
@@ -335,8 +417,6 @@
     );
 
     for (const anchor of links) {
-      if (anchor.dataset.ghpDownloadAction === '1') continue;
-
       let url;
       try {
         url = new URL(anchor.href, window.location.origin);
@@ -355,10 +435,23 @@
       if (!route || url.protocol !== 'https:') continue;
 
       const proxyUrl = buildProxyUrl(route, url.pathname, url.search);
+
+      let existing = anchor.nextElementSibling;
+      if (existing && existing.classList.contains('ghp-download-proxy') && existing.getAttribute('href') === proxyUrl) {
+        continue;
+      }
+
+      let sibling = anchor.nextElementSibling;
+      while (sibling && sibling.classList.contains('ghp-download-proxy')) {
+        const toRemove = sibling;
+        sibling = sibling.nextElementSibling;
+        toRemove.remove();
+      }
+
       const link = createLink('Proxy', proxyUrl);
+      link.classList.add('ghp-download-proxy');
       link.title = 'Download through GitHub Proxy';
       anchor.insertAdjacentElement('afterend', link);
-      anchor.dataset.ghpDownloadAction = '1';
     }
   }
 })();
