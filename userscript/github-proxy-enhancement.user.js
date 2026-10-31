@@ -2,7 +2,7 @@
 // @name         GitHub Proxy
 // @name:zh-CN   Github 代理
 // @namespace    github-proxy
-// @version      1.0.0
+// @version      1.0.1
 // @author       梦初雪
 // @description  Add proxy-aware Git clone, Raw, Release and source archive links to GitHub.
 // @match        https://github.com/*
@@ -117,6 +117,7 @@
 
   function scanPage() {
     if (!getEnabled() || !getProxyBase()) return;
+    cleanupOrphanRawItems();
     addCloneActions();
     addRawPageAction();
     addRawFileListActions();
@@ -239,6 +240,23 @@
     return pathname.slice(0, index) + '/' + pathname.slice(index + marker.length);
   }
 
+  // 清理 React 重新渲染后残留的孤立 Raw via Proxy Item
+  function cleanupOrphanRawItems() {
+    document.querySelectorAll('[data-ghp-raw-item]').forEach((node) => {
+      const prev = node.previousElementSibling;
+      const stillValid = prev &&
+        prev.querySelector('[data-ghp-raw-action="1"]') &&
+        node.parentElement &&
+        node.parentElement.querySelector('[data-component="ButtonGroup"]');
+      // 只要它还在 ButtonGroup 里、且前一项是当前 Raw 按钮，就保留
+      if (!stillValid && !node.querySelector('[data-ghp-raw-action="1"]')) {
+        // 若 Item 本身还挂在 Page 上但不属于当前 ButtonGroup，则移除
+        const group = node.closest('[data-component="ButtonGroup"]');
+        if (!group) node.remove();
+      }
+    });
+  }
+
   function addRawPageAction() {
     const rawPath = rawPathFromBlob(window.location.pathname);
     if (!rawPath) return;
@@ -250,11 +268,43 @@
 
     if (!rawButton || rawButton.dataset.ghpRawAction === '1') return;
 
-    const link = createLink(
-      'Raw via Proxy',
-      buildProxyUrl('raw', rawPath, window.location.search)
-    );
-    rawButton.insertAdjacentElement('afterend', link);
+    const proxyUrl = buildProxyUrl('raw', rawPath, window.location.search);
+
+    const item = rawButton.closest('.prc-ButtonGroup-Item-PqvDl');
+    const group = rawButton.closest('[data-component="ButtonGroup"]');
+
+    if (item && group && item.parentElement === group) {
+      // 1. 克隆 Raw 链接 → 完整继承 GitHub 原生 LinkButton 样式
+      const link = rawButton.cloneNode(true);
+      link.removeAttribute('data-testid');
+      link.removeAttribute('data-ghp-raw-action');
+      link.href = proxyUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer nofollow';
+      link.referrerPolicy = 'no-referrer';
+      link.setAttribute('aria-label', 'Raw via Proxy');
+
+      const label = link.querySelector('[data-component="text"]');
+      if (label) {
+        label.textContent = 'Raw via Proxy';
+      } else {
+        link.textContent = 'Raw via Proxy';
+      }
+
+      // 2. 克隆原 Item 的容器，作为独立的 ButtonGroup Item
+      const newItem = document.createElement('div');
+      newItem.className = item.className;
+      newItem.dataset.ghpRawItem = '1';
+      newItem.appendChild(link);
+
+      // 3. 插到 Raw 所在 Item 后面（ButtonGroup 会自动重新计算圆角）
+      item.after(newItem);
+    } else {
+      // 兜底：找不到 ButtonGroup 结构时退回原逻辑
+      const link = createLink('Raw via Proxy', proxyUrl);
+      rawButton.insertAdjacentElement('afterend', link);
+    }
+
     rawButton.dataset.ghpRawAction = '1';
   }
 
