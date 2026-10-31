@@ -181,7 +181,3 @@ curl -i "https://YOUR-WORKER-HOST/gh/OWNER/REPOSITORY.git/info/refs?service=git-
 ```bash
 curl -I "https://YOUR-WORKER-HOST/raw/OWNER/REPOSITORY/BRANCH/README.md"
 ```
-
-## 9. License
-
-当前项目没有附带许可证文件。公开发布前，请根据希望授予他人的使用、修改和再分发权限选择并添加许可证。
