@@ -2,11 +2,11 @@
 // @name         GitHub Proxy
 // @name:zh-CN   Github 代理
 // @namespace    github-proxy
-// @version      1.0.3
+// @version      1.0.4
 // @author       梦初雪
 // @description  Add proxy-aware Git clone, Raw, Release and source archive links to GitHub.
 // @match        https://github.com/*
-// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAACEUExURUxpcRgWFhsYGBgWFhcWFh8WFhoYGBgWFiUlJRcVFRkWFhgVFRgWFhgVFRsWFhgWFigeHhkWFv////////////r6+h4eHv///xcVFfLx8SMhQUNCQpSTk/r6+jY0NCknJ97e3ru7u+fn51BOTsPCwqGgoISDg6empmpoaK2srNDQ0FhXV3eXcCcAAAAXdFJOUwCBIZXMGP70BuRH2Ze/LpIMUunHkpQR34sfygAAAVpJREFUOMt1U+magjAMDAVb5BDU3W25b9T1/d9vaYpQKDs/rF9nSNJkArDA9ezQZ8wPbc8FE6eAiQUsOO1o19JolFibKCdHGHC0IJezOMD5snx/yE+KOYYr42fPSufSZyazqDoseTPw4lGJNOu6LBXVUPBG3lqYAOv/5ZwnNUfUifzBt8gkgfgINmjxOpgqUA147QWNaocLniqq3QsSVbQHNp45N/BAwoYQz9oUJEiE4GMGfoBSMj5gjeWRIMMqleD/CAzUHFqTLyjOA5zjNnwa4UCEZ2YK3khEcBXHjVBtEFeIZ6+NxYbPqWp1DLKV42t6Ujn2ydyiPi9nX0TTNAkVVZ/gozsl6FbrktkwaVvL2TRK0C8Ca7Hck7f5OBT6FFbLATkL2ugV0tm0RLM9fedDvhWstl8Wp9AFDjFX7yOY/lJrv8AkYuz7fuP8dv9izCYH+x3/LBnj9fYPBTpJDNzX+7cAAAAASUVORK5CYII=
+// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAACEUExURUxpcRgWFhsYGBgWFhcWFh8WFhoYGBgWFiUlJRcVFRkWFhgVFRgWFhgVFRsWFhgWFigeHhkWFv////////////r6+h4eHv///xcVFfLx8SMhIUNCQpSTk/r6+jY0NCknJ97e3ru7u+fn51BOTsPCwqGgoISDg6empmpoaK2srNDQ0FhXV3eXcCcAAAAXdFJOUwCBIZXMGP70BuRH2Ze/LpIMUunHkpQR34sfygAAAVpJREFUOMt1U+magjAMDAVb5BDU3W25b9T1/d9vaYpQKDs/rF9nSNJkArDA9ezQZ8wPbc8FE6eAiQUsOO1o19JolFibKCdHGHC0IJezOMD5snx/yE+KOYYr42fPSufSZyazqDoseTPw4lGJNOu6LBXVUPBG3lqYAOv/5ZwnNUfUifzBt8gkgfgINmjxOpgqUA147QWNaocLniqq3QsSVbQHNp45N/BAwoYQz9oUJEiE4GMGfoBSMj5gjeWRIMMqleD/CAzUHFqTLyjOA5zjNnwa4UCEZ2YK3khEcBXHjVBtEFeIZ6+NxYbPqWp1DLKV42t6Ujn2ydyiPi9nX0TTNAkVVZ/gozsl6FbrktkwaVvL2TRK0C8Ca7Hck7f5OBT6FFbLATkL2ugV0tm0RLM9fedDvhWstl8Wp9AFDjFX7yOY/lJrv8AkYuz7fuP8dv9izCYH+x3/LBnj9fYPBTpJDNzX+7cAAAAASUVORK5CYII=
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -193,22 +193,17 @@
     return link;
   }
 
-  function createCopyButton(label, value) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = BUTTON_CLASS;
-    button.dataset.ghpKind = 'copy';
-    button.textContent = label;
-    button.addEventListener('click', () => {
-      GM_setClipboard(value);
-      notify('Copied to clipboard.');
-    });
-    return button;
-  }
-
-  // 核心修复：清理 React 重新渲染后，宿主节点消失导致残留的“孤儿按钮”
   function cleanupStaleNodes() {
-    // 清理 Clone 克隆按钮组
+    // 清理 Clone 代理克隆框
+    document.querySelectorAll('[data-ghp-proxy-clone]').forEach(item => {
+      const prev = item.previousElementSibling;
+      const input = prev && prev.querySelector('input[id^="clone-with-"]');
+      if (!input || (!input.value.startsWith('git clone http') && !input.value.startsWith('http'))) {
+        item.remove();
+      }
+    });
+
+    // 清理老版本残留的 Clone 按钮组
     document.querySelectorAll(`.${WRAPPER_CLASS}`).forEach(wrapper => {
       const prev = wrapper.previousElementSibling;
       const hasInput = prev && (prev.tagName === 'INPUT' || prev.querySelector('input'));
@@ -262,45 +257,103 @@
   }
 
   function addCloneActions() {
-    const inputs = document.querySelectorAll('input');
-
+    const inputs = document.querySelectorAll('input[id^="clone-with-"]');
+    
     for (const input of inputs) {
-      const rawValue = (input.value || input.getAttribute('value') || '').trim();
-      const cloneValue = rawValue.replace(/^git\s+clone\s+/i, '');
-      const githubUrl = parseGitHubUrl(cloneValue);
+      let rawValue = input.value.trim();
+      if (!rawValue.startsWith('http') && !rawValue.startsWith('git clone http')) continue;
+      
+      const urlToParse = rawValue.replace(/^git\s+clone\s+/i, '');
+      const githubUrl = parseGitHubUrl(urlToParse);
       if (!githubUrl) continue;
-
-      const pathParts = githubUrl.pathname.split('/').filter(Boolean);
-      if (pathParts.length !== 2 || !pathParts[1]) continue;
-      if (input.closest('form') && input.type !== 'text') continue;
-
-      const proxyUrl = buildProxyUrl('gh', githubUrl.pathname.replace(/\/$/, '') + (githubUrl.pathname.endsWith('.git') ? '' : '.git'), githubUrl.search);
-
-      const anchor = input.closest('[class*="InputGroup"], [class*="input-group"]') || input.parentElement;
-      if (!anchor || !anchor.parentNode) continue;
-
-      let existing = anchor.nextElementSibling;
-      if (existing && existing.classList.contains(WRAPPER_CLASS) && existing.dataset.ghpFor === proxyUrl) {
-        continue;
+      
+      const container = input.parentElement;
+      if (!container) continue;
+      
+      // 1. 将原生输入框的值修改为带 git clone 前缀
+      if (!input.value.startsWith('git clone ')) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+        nativeSetter.call(input, `git clone ${input.value}`);
       }
-
-      let sibling = anchor.nextElementSibling;
-      while (sibling && sibling.classList.contains(WRAPPER_CLASS)) {
+      
+      // 2. 劫持原生复制按钮，确保复制出来的值为完整命令
+      const copyBtn = container.querySelector('button');
+      if (copyBtn && copyBtn.dataset.ghpCloneBound !== '1') {
+        copyBtn.dataset.ghpCloneBound = '1';
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          let val = input.value;
+          if (val.startsWith('http')) {
+            val = `git clone ${val}`;
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            nativeSetter.call(input, val);
+          }
+          GM_setClipboard(val);
+          notify('Copied to clipboard.');
+        }, true);
+      }
+      
+      // 3. 生成代理 URL 及命令
+      const proxyUrl = buildProxyUrl('gh', githubUrl.pathname.replace(/\/$/, '') + (githubUrl.pathname.endsWith('.git') ? '' : '.git'), githubUrl.search);
+      const proxyCommand = `git clone ${proxyUrl}`;
+      
+      // 4. 查重与清理旧节点
+      let existing = container.nextElementSibling;
+      if (existing && existing.hasAttribute('data-ghp-proxy-clone')) {
+        const existingInput = existing.querySelector('input');
+        if (existingInput && existingInput.value === proxyCommand) {
+          continue;
+        }
+      }
+      
+      let sibling = container.nextElementSibling;
+      while (sibling && sibling.hasAttribute('data-ghp-proxy-clone')) {
         const toRemove = sibling;
         sibling = sibling.nextElementSibling;
         toRemove.remove();
       }
-
-      const wrapper = document.createElement('div');
-      wrapper.className = WRAPPER_CLASS;
-      wrapper.dataset.ghpFor = proxyUrl;
-      wrapper.append(
-        createCopyButton('Copy proxy URL', proxyUrl),
-        createCopyButton('Copy proxy git clone command', `git clone ${proxyUrl}`),
-        createLink('Open proxy URL', proxyUrl)
-      );
-
-      anchor.insertAdjacentElement('afterend', wrapper);
+      
+      // 5. 克隆原生容器
+      const newContainer = container.cloneNode(true);
+      newContainer.setAttribute('data-ghp-proxy-clone', '1');
+      
+      const newInput = newContainer.querySelector('input');
+      if (newInput) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+        nativeSetter.call(newInput, proxyCommand);
+        newInput.id = 'clone-with-proxy';
+      }
+      
+      const label = newContainer.querySelector('label');
+      if (label) label.remove();
+      
+      // 6. 替换克隆的复制按钮，剥离 React 事件并绑定自定义复制
+      const oldBtn = newContainer.querySelector('button');
+      if (oldBtn) {
+        const newBtn = document.createElement('button');
+        newBtn.type = 'button';
+        newBtn.className = oldBtn.className;
+        newBtn.innerHTML = oldBtn.innerHTML;
+        newBtn.title = 'Copy proxy clone command';
+        
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          GM_setClipboard(proxyCommand);
+          notify('Copied to clipboard.');
+        });
+        
+        for (const attr of [...newBtn.attributes]) {
+          if (attr.name.startsWith('data-') || attr.name === 'aria-labelledby') {
+            newBtn.removeAttribute(attr.name);
+          }
+        }
+        
+        oldBtn.replaceWith(newBtn);
+      }
+      
+      container.after(newContainer);
     }
   }
 
@@ -368,19 +421,19 @@
       item.after(newItem);
     } else {
       rawButton.dataset.ghpRawAction = '1';
-
+      
       let existing = rawButton.nextElementSibling;
       if (existing && existing.classList.contains('ghp-raw-fallback') && existing.getAttribute('href') === proxyUrl) {
         return;
       }
-
+      
       let sibling = rawButton.nextElementSibling;
       while (sibling && sibling.classList.contains('ghp-raw-fallback')) {
         const toRemove = sibling;
         sibling = sibling.nextElementSibling;
         toRemove.remove();
       }
-
+      
       const link = createLink('Raw via Proxy', proxyUrl);
       link.classList.add('ghp-raw-fallback');
       rawButton.insertAdjacentElement('afterend', link);
@@ -443,10 +496,9 @@
       if (!route || url.protocol !== 'https:') continue;
 
       const proxyUrl = buildProxyUrl(route, url.pathname, url.search);
-
-      // 尝试寻找 GitHub 原生的 ActionList 菜单节点
+      
       const actionListItem = anchor.closest('li[data-component="ActionList.Item"]');
-
+      
       if (actionListItem) {
         let existing = actionListItem.nextElementSibling;
         if (existing && existing.hasAttribute('data-ghp-download-item')) {
@@ -463,11 +515,9 @@
           toRemove.remove();
         }
 
-        // 克隆整个原生 li 节点
         const newLi = actionListItem.cloneNode(true);
         newLi.setAttribute('data-ghp-download-item', '1');
-
-        // 移除可能克隆进来的旧脚本节点
+        
         newLi.querySelectorAll('.ghp-action, .ghp-download-proxy').forEach(el => el.remove());
 
         const newAnchor = newLi.querySelector('a');
@@ -480,7 +530,6 @@
           newAnchor.removeAttribute('aria-labelledby');
           newAnchor.setAttribute('title', 'Download through GitHub Proxy');
 
-          // 修改文本，保留原有图标
           const label = newAnchor.querySelector('[data-component="ActionList.Item.Label"]');
           if (label) {
             label.textContent = `${label.textContent} (Proxy)`;
@@ -488,11 +537,10 @@
             newAnchor.textContent = 'Download via Proxy';
           }
         }
-
+        
         actionListItem.after(newLi);
 
       } else {
-        // 兜底逻辑：使用自定义样式
         let existing = anchor.nextElementSibling;
         if (existing && existing.classList.contains('ghp-download-proxy') && existing.getAttribute('href') === proxyUrl) {
           continue;
