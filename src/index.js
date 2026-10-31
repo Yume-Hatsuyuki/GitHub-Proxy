@@ -242,7 +242,7 @@ function landingPage(url, healthOnly = false) {
   }
 
   const base = `${url.protocol}//${url.host}`;
-  const host = escapeHtml(url.host);
+  const escapedBase = escapeHtml(base);
   const gitUrl = `${base}/gh/OWNER/REPOSITORY.git`;
   const html = `<!doctype html>
 <html lang="en">
@@ -265,7 +265,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px;bord
 <p class="muted">Fixed-upstream HTTPS proxy · SSH is not supported</p>
 <div class="card">
 <strong>Git over HTTPS</strong>
-<p>Replace the <code>https://github.com/</code> prefix in a repository URL with <code>${url.protocol}//${host}/gh/</code>.</p>
+<p>Replace the <code>https://github.com/</code> prefix in a repository URL with <code>${escapedBase}/gh/</code>.</p>
 <pre>git remote set-url origin ${escapeHtml(gitUrl)}
 git push -u origin main</pre>
 </div>
@@ -287,10 +287,10 @@ git push -u origin main</pre>
 </div>
 <div class="card">
 <strong>Examples</strong>
-<p>Raw file:</p><pre>${host}/raw/OWNER/REPOSITORY/BRANCH/PATH/TO/FILE</pre>
-<p>Release asset:</p><pre>${host}/release/OWNER/REPOSITORY/releases/download/TAG/FILE</pre>
-<p>Source archive:</p><pre>${host}/archive/OWNER/REPOSITORY/archive/refs/heads/BRANCH.zip</pre>
-<p>API:</p><pre>${host}/api/repos/OWNER/REPOSITORY</pre>
+<p>Raw file:</p><pre>${escapedBase}/raw/OWNER/REPOSITORY/BRANCH/PATH/TO/FILE</pre>
+<p>Release asset:</p><pre>${escapedBase}/release/OWNER/REPOSITORY/releases/download/TAG/FILE</pre>
+<p>Source archive:</p><pre>${escapedBase}/archive/OWNER/REPOSITORY/archive/refs/heads/BRANCH.zip</pre>
+<p>API:</p><pre>${escapedBase}/api/repos/OWNER/REPOSITORY</pre>
 </div>
 <p class="muted">Requests are forwarded only to fixed GitHub-related upstream hosts; arbitrary destination URLs are not accepted. Git protocol and API requests are not cached. GitHub web-page HTML is not fully rewritten, so this is not a complete website mirror. Public deployments can be used by anyone unless an access key is configured.</p>
 </body>
