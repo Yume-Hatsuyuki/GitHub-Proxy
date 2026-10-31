@@ -2,7 +2,7 @@
 // @name         GitHub Proxy
 // @name:zh-CN   Github 代理
 // @namespace    github-proxy
-// @version      1.0.4
+// @version      1.0.5
 // @author       梦初雪
 // @description  Add proxy-aware Git clone, Raw, Release and source archive links to GitHub.
 // @match        https://github.com/*
@@ -276,8 +276,8 @@
         nativeSetter.call(input, `git clone ${input.value}`);
       }
       
-      // 2. 劫持原生复制按钮，确保复制出来的值为完整命令
-      const copyBtn = container.querySelector('button');
+      // 2. 劫持原生复制按钮
+      const copyBtn = container.querySelector('button[data-component="IconButton"]');
       if (copyBtn && copyBtn.dataset.ghpCloneBound !== '1') {
         copyBtn.dataset.ghpCloneBound = '1';
         copyBtn.addEventListener('click', (e) => {
@@ -314,28 +314,32 @@
         toRemove.remove();
       }
       
-      // 5. 克隆原生容器
+      // 5. 克隆原生容器（保留所有 class 和 data-* 属性以获得完美样式）
       const newContainer = container.cloneNode(true);
       newContainer.setAttribute('data-ghp-proxy-clone', '1');
       
+      // 6. 修改克隆输入框的值
       const newInput = newContainer.querySelector('input');
       if (newInput) {
-        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-        nativeSetter.call(newInput, proxyCommand);
-        newInput.id = 'clone-with-proxy';
+        newInput.value = proxyCommand;
+        newInput.id = 'clone-with-proxy'; // 防止 ID 冲突
+        newInput.removeAttribute('data-autoselect');
       }
       
+      // 移除多余的 label
       const label = newContainer.querySelector('label');
       if (label) label.remove();
       
-      // 6. 替换克隆的复制按钮，剥离 React 事件并绑定自定义复制
-      const oldBtn = newContainer.querySelector('button');
-      if (oldBtn) {
-        const newBtn = document.createElement('button');
-        newBtn.type = 'button';
-        newBtn.className = oldBtn.className;
-        newBtn.innerHTML = oldBtn.innerHTML;
-        newBtn.title = 'Copy proxy clone command';
+      // 移除原生的 tooltip，防止悬浮提示错乱
+      const tooltip = newContainer.querySelector('.prc-TooltipV2-Tooltip-tLeuB');
+      if (tooltip) tooltip.remove();
+      
+      // 7. 重新绑定克隆出来的复制按钮事件（不删除原有属性，完美保持原生样式）
+      const newBtn = newContainer.querySelector('button[data-component="IconButton"]');
+      if (newBtn) {
+        newBtn.removeAttribute('aria-labelledby');
+        newBtn.setAttribute('aria-label', 'Copy proxy clone command');
+        newBtn.setAttribute('title', 'Copy proxy clone command');
         
         newBtn.addEventListener('click', (e) => {
           e.preventDefault();
@@ -343,14 +347,6 @@
           GM_setClipboard(proxyCommand);
           notify('Copied to clipboard.');
         });
-        
-        for (const attr of [...newBtn.attributes]) {
-          if (attr.name.startsWith('data-') || attr.name === 'aria-labelledby') {
-            newBtn.removeAttribute(attr.name);
-          }
-        }
-        
-        oldBtn.replaceWith(newBtn);
       }
       
       container.after(newContainer);
